@@ -63,7 +63,7 @@ public class MainPlugin : TerrariaPlugin
             args.Player.SendErrorMessage("指定的物品无效");
             return;
         }
-        int item = itemByIdOrName[0].netID;
+        int item = itemByIdOrName[0].type;
         TSPlayer player = new(-1);
         PlayerData? playerdata;
         int count = 0;
@@ -76,7 +76,7 @@ public class MainPlugin : TerrariaPlugin
             var plr = TSPlayer.FindByNameOrID(acc.Name).FirstOrDefault()!;
             for (int i = 0; i < plr.TPlayer.inventory.Length; i++)
             {
-                if (plr.TPlayer.inventory[i].netID == item)
+                if (plr.TPlayer.inventory[i].type == item)
                 {
                     count += plr.TPlayer.inventory[i].stack;
                     plr.TPlayer.inventory[i].SetDefaults(0);
@@ -86,7 +86,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.armor.Length; i++)
             {
-                if (plr.TPlayer.armor[i].netID == item)
+                if (plr.TPlayer.armor[i].type == item)
                 {
                     count += plr.TPlayer.armor[i].stack;
                     plr.TPlayer.armor[i].SetDefaults(0);
@@ -96,7 +96,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.dye.Length; i++)
             {
-                if (plr.TPlayer.dye[i].netID == item)
+                if (plr.TPlayer.dye[i].type == item)
                 {
                     count += plr.TPlayer.dye[i].stack;
                     plr.TPlayer.dye[i].SetDefaults(0);
@@ -106,7 +106,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.miscEquips.Length; i++)
             {
-                if (plr.TPlayer.miscEquips[i].netID == item)
+                if (plr.TPlayer.miscEquips[i].type == item)
                 {
                     count += plr.TPlayer.miscEquips[i].stack;
                     plr.TPlayer.miscEquips[i].SetDefaults(0);
@@ -116,7 +116,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.miscDyes.Length; i++)
             {
-                if (plr.TPlayer.miscDyes[i].netID == item)
+                if (plr.TPlayer.miscDyes[i].type == item)
                 {
                     count += plr.TPlayer.miscEquips[i].stack;
                     plr.TPlayer.miscEquips[i].SetDefaults(0);
@@ -126,7 +126,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.bank.item.Length; i++)
             {
-                if (plr.TPlayer.bank.item[i].netID == item)
+                if (plr.TPlayer.bank.item[i].type == item)
                 {
                     count += plr.TPlayer.bank.item[i].stack;
                     plr.TPlayer.bank.item[i].SetDefaults(0);
@@ -136,7 +136,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.bank2.item.Length; i++)
             {
-                if (plr.TPlayer.bank2.item[i].netID == item)
+                if (plr.TPlayer.bank2.item[i].type == item)
                 {
                     count += plr.TPlayer.bank2.item[i].stack;
                     plr.TPlayer.bank2.item[i].SetDefaults(0);
@@ -146,7 +146,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.bank3.item.Length; i++)
             {
-                if (plr.TPlayer.bank3.item[i].netID == item)
+                if (plr.TPlayer.bank3.item[i].type == item)
                 {
                     count += plr.TPlayer.bank3.item[i].stack;
                     plr.TPlayer.bank3.item[i].SetDefaults(0);
@@ -156,7 +156,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.bank4.item.Length; i++)
             {
-                if (plr.TPlayer.bank4.item[i].netID == item)
+                if (plr.TPlayer.bank4.item[i].type == item)
                 {
                     count += plr.TPlayer.bank4.item[i].stack;
                     plr.TPlayer.bank4.item[i].SetDefaults(0);
@@ -166,7 +166,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.Loadouts[0].Armor.Length; i++)
             {
-                if (plr.TPlayer.Loadouts[0].Armor[i].netID == item)
+                if (plr.TPlayer.Loadouts[0].Armor[i].type == item)
                 {
                     count += plr.TPlayer.Loadouts[0].Armor[i].stack;
                     plr.TPlayer.Loadouts[0].Armor[i].SetDefaults(0);
@@ -176,7 +176,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.Loadouts[1].Armor.Length; i++)
             {
-                if (plr.TPlayer.Loadouts[1].Armor[i].netID == item)
+                if (plr.TPlayer.Loadouts[1].Armor[i].type == item)
                 {
                     count += plr.TPlayer.Loadouts[1].Armor[i].stack;
                     plr.TPlayer.Loadouts[1].Armor[i].SetDefaults(0);
@@ -186,7 +186,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.Loadouts[2].Armor.Length; i++)
             {
-                if (plr.TPlayer.Loadouts[2].Armor[i].netID == item)
+                if (plr.TPlayer.Loadouts[2].Armor[i].type == item)
                 {
                     count += plr.TPlayer.Loadouts[2].Armor[i].stack;
                     plr.TPlayer.Loadouts[2].Armor[i].SetDefaults(0);
@@ -196,7 +196,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.Loadouts[0].Dye.Length; i++)
             {
-                if (plr.TPlayer.Loadouts[0].Dye[i].netID == item)
+                if (plr.TPlayer.Loadouts[0].Dye[i].type == item)
                 {
                     count += plr.TPlayer.Loadouts[0].Dye[i].stack;
 
@@ -207,7 +207,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.Loadouts[1].Dye.Length; i++)
             {
-                if (plr.TPlayer.Loadouts[1].Dye[i].netID == item)
+                if (plr.TPlayer.Loadouts[1].Dye[i].type == item)
                 {
                     count += plr.TPlayer.Loadouts[1].Dye[i].stack;
                     plr.TPlayer.Loadouts[1].Dye[i].SetDefaults(0);
@@ -217,7 +217,7 @@ public class MainPlugin : TerrariaPlugin
             }
             for (int i = 0; i < plr.TPlayer.Loadouts[2].Dye.Length; i++)
             {
-                if (plr.TPlayer.Loadouts[2].Dye[i].netID == item)
+                if (plr.TPlayer.Loadouts[2].Dye[i].type == item)
                 {
                     count += plr.TPlayer.Loadouts[2].Dye[i].stack;
                     plr.TPlayer.Loadouts[2].Dye[i].SetDefaults(0);
@@ -225,7 +225,7 @@ public class MainPlugin : TerrariaPlugin
 
                 }
             }
-            if (plr.TPlayer.trashItem.netID == item)
+            if (plr.TPlayer.trashItem.type == item)
             {
                 count += plr.TPlayer.trashItem.stack;
                 plr.TPlayer.trashItem.SetDefaults(0);
@@ -257,7 +257,7 @@ public class MainPlugin : TerrariaPlugin
                 //改成for()循环
                 for (int i = 0; i < playerdata.inventory.Length; i++)
                 {
-                    if (playerdata.inventory[i].NetId == item)
+                    if (playerdata.inventory[i].type == item)
                     {
                         count += playerdata.inventory[i].Stack;
                         playerdata.inventory[i] = new(0, 0, 0);
@@ -274,7 +274,7 @@ public class MainPlugin : TerrariaPlugin
                 return;
             }
         }
-        args.Player.SendSuccessMessage($"已移除玩家{acc.Name}的{TShock.Utils.ItemTag(new() { netID = item, stack = 1, prefix = 0 })}X{count}");
+        args.Player.SendSuccessMessage($"已移除玩家{acc.Name}的{TShock.Utils.ItemTag(new() { type = item, stack = 1, prefix = 0 })}X{count}");
         return;
 
 
@@ -312,19 +312,19 @@ public class MainPlugin : TerrariaPlugin
             args.Player.SendErrorMessage("指定的物品无效");
             return;
         }
-        int item = itemByIdOrName[0].netID;
+        int item = itemByIdOrName[0].type;
         for (int i = 0; i < Main.chest[int.Parse(args.Parameters[0])].item.Length; i++)
         {
-            if (Main.chest[int.Parse(args.Parameters[0])].item[i] != null && Main.chest[int.Parse(args.Parameters[0])].item[i].netID == item)
+            if (Main.chest[int.Parse(args.Parameters[0])].item[i] != null && Main.chest[int.Parse(args.Parameters[0])].item[i].type == item)
             {
-                Main.chest[int.Parse(args.Parameters[0])].item[i] = new Item { netID = 0 };
+                Main.chest[int.Parse(args.Parameters[0])].item[i] = new Item { type = 0 };
             }
         }
         var chest = Main.chest[int.Parse(args.Parameters[0])];
         var itemStr = "";
         foreach (var i in chest.item)
         {
-            if (i.netID == 0)
+            if (i.type == 0)
             {
                 continue;
             }
@@ -334,7 +334,7 @@ public class MainPlugin : TerrariaPlugin
         {
             itemStr = "空箱子";
         }
-        args.Player.SendSuccessMessage($"箱子中的所有{TShock.Utils.ItemTag(new() { netID = item, stack = 1, prefix = 0 })}已被移除\n" +
+        args.Player.SendSuccessMessage($"箱子中的所有{TShock.Utils.ItemTag(new() { type = item, stack = 1, prefix = 0 })}已被移除\n" +
             $"箱子ID:{args.Parameters[0]}\n" +
             $"坐标:({chest.x},{chest.y})\n" +
             $"名字:{(string.IsNullOrEmpty(chest.name) ? "无名箱子" : chest.name)}\n" +
@@ -400,7 +400,7 @@ public class MainPlugin : TerrariaPlugin
         var itemStr = "";
         foreach (var i in chest.item)
         {
-            if (i.netID == 0)
+            if (i.type == 0)
             {
                 continue;
             }
@@ -481,7 +481,7 @@ public class MainPlugin : TerrariaPlugin
             int items = 0;
             foreach (var c in Main.chest[id].item)
             {
-                if (c.netID == item)
+                if (c.type == item)
                 {
                     items += c.stack;
                 }
@@ -535,10 +535,10 @@ public class MainPlugin : TerrariaPlugin
                 return;
             }
             int item = itemByIdOrName[0].type;
-            TShock.Players.ForEach(delegate (TSPlayer p)
+            foreach (var p in TShock.Players)
             {
                 p?.SaveServerCharacter();
-            });
+            }
             List<UserAccount> userAccounts = TShock.UserAccounts.GetUserAccounts();
             List<(string, int)> list = new List<(string, int)>();
             //queryResult = TShock.CharacterDB.database.QueryReader("SELECT * FROM tsCharacter");
@@ -559,7 +559,7 @@ public class MainPlugin : TerrariaPlugin
                     List<NetItem> list2 = TryGetInventory(item2.ID);
                     if (list2 != null)
                     {
-                        int num = list2.Where((NetItem i) => i.NetId == item).Sum((NetItem i) => i.Stack);
+                        int num = list2.Where((NetItem i) => i.type == item).Sum((NetItem i) => i.Stack);
                         if (num > 0)
                         {
                             list.Add((item2.Name, num));
