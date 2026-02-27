@@ -257,7 +257,7 @@ public class MainPlugin : TerrariaPlugin
                 //改成for()循环
                 for (int i = 0; i < playerdata.inventory.Length; i++)
                 {
-                    if (playerdata.inventory[i].type == item)
+                    if (playerdata.inventory[i].netID == item)
                     {
                         count += playerdata.inventory[i].Stack;
                         playerdata.inventory[i] = new(0, 0, 0);
