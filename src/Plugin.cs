@@ -257,7 +257,7 @@ public class MainPlugin : TerrariaPlugin
                 //改成for()循环
                 for (int i = 0; i < playerdata.inventory.Length; i++)
                 {
-                    if (playerdata.inventory[i].NetId == item)
+                    if (playerdata.inventory[i].type == item)
                     {
                         count += playerdata.inventory[i].Stack;
                         playerdata.inventory[i] = new(0, 0, 0);
@@ -559,7 +559,7 @@ public class MainPlugin : TerrariaPlugin
                     List<NetItem>? list2 = TryGetInventory(item2.ID);
                     if (list2 != null)
                     {
-                        int num = list2.Where(i => i.NetId == item).Sum(i => i.Stack);
+                        int num = list2.Where((NetItem i) => i.NetId == item).Sum((NetItem i) => i.Stack);
                         if (num > 0)
                         {
                             list.Add((item2.Name, num));
