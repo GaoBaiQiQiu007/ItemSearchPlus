@@ -22,7 +22,7 @@ public class MainPlugin : TerrariaPlugin
     private TimeSpan _punishCooldown = TimeSpan.FromSeconds(30);
     private bool _abnormalLogBroadcastEnabled = true;
     private TimeSpan _abnormalLogBroadcastInterval = TimeSpan.FromHours(1);
-    private DateTime _lastAbnormalLogBroadcast = DateTime.MinValue;
+    private DateTime _lastAbnormalLogBroadcast = DateTime.UtcNow;
     private HashSet<int> _illegalItemIds = new()
     {
         ItemID.Zenith,
@@ -197,29 +197,33 @@ public class MainPlugin : TerrariaPlugin
             return;
         }
 
-        if (DateTime.UtcNow - _lastAbnormalLogBroadcast < _abnormalLogBroadcastInterval)
+        var now = DateTime.UtcNow;
+        if (now - _lastAbnormalLogBroadcast < _abnormalLogBroadcastInterval)
         {
             return;
         }
 
-        _lastAbnormalLogBroadcast = DateTime.UtcNow;
-
         QueryResult? result = null;
         try
         {
-            result = TShock.DB.QueryReader("SELECT COUNT(1) FROM item_guard_logs WHERE reason LIKE @0", "%异常%");
+            result = TShock.DB.QueryReader("SELECT COUNT(1) FROM item_guard_logs WHERE reason LIKE @0 AND time_utc >= @1", "%异常%", _lastAbnormalLogBroadcast.ToString("O"));
             if (result.Reader.Read())
             {
                 var count = Convert.ToInt32(result.Reader.GetValue(0));
                 if (count > 0)
                 {
-                    TShock.Utils.Broadcast($"[物品查找] 当前累计异常物品日志 {count} 条，请管理员及时使用 /ig logs 查看。", Color.Gold);
+                    TShock.Utils.Broadcast($"[物品查找] 最近 {Math.Max(1, (int)_abnormalLogBroadcastInterval.TotalHours)} 小时新增异常日志 {count} 条，请管理员及时使用 /ig logs 查看。", Color.Gold);
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            TShock.Log.ConsoleError($"[ItemSearchPlus] 异常日志定时通报失败: {ex}");
         }
         finally
         {
             result?.Dispose();
+            _lastAbnormalLogBroadcast = now;
         }
     }
 
@@ -598,8 +602,8 @@ action TEXT
             {
                 if (plr.TPlayer.miscDyes[i].type == item)
                 {
-                    count += plr.TPlayer.miscEquips[i].stack;
-                    plr.TPlayer.miscEquips[i].SetDefaults(0);
+                    count += plr.TPlayer.miscDyes[i].stack;
+                    plr.TPlayer.miscDyes[i].SetDefaults(0);
                     NetMessage.SendData(5, -1, -1, null, plr.Index, PlayerItemSlotID.MiscDye0 + i);
 
                 }
@@ -1077,6 +1081,11 @@ action TEXT
         {
             Console.WriteLine(ex);
         }
+        finally
+        {
+            queryResult?.Dispose();
+            queryResult = null;
+        }
 
     }
 
@@ -1104,7 +1113,6 @@ action TEXT
                 list.InsertRange(87, new NetItem[2]);
                 list.AddRange(new NetItem[NetItem.MaxInventory - list.Count]);
             }
-            queryResult?.Dispose();
             return list;
         }
         catch
