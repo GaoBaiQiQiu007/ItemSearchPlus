@@ -4,11 +4,57 @@ using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.DB;
 using Terraria.ID;
+using Microsoft.Xna.Framework;
 
 [ApiVersion(2, 1)]
 public class MainPlugin : TerrariaPlugin
 {
     QueryResult? queryResult = null;
+
+    private DateTime _lastInventoryScan = DateTime.MinValue;
+    private readonly Dictionary<int, DateTime> _punishRecords = new();
+    private bool _detectionEnabled = true;
+    private bool _autoWebOnDetect = true;
+    private bool _broadcastOnDetect = true;
+    private int _abnormalStackMultiplier = 2;
+    private int _actionLevel = 3;
+    private TimeSpan _scanInterval = TimeSpan.FromSeconds(10);
+    private TimeSpan _punishCooldown = TimeSpan.FromSeconds(30);
+    private bool _abnormalLogBroadcastEnabled = true;
+    private TimeSpan _abnormalLogBroadcastInterval = TimeSpan.FromHours(1);
+    private DateTime _lastAbnormalLogBroadcast = DateTime.UtcNow;
+    private HashSet<int> _illegalItemIds = CreateDefaultIllegalItemIds();
+    private string ConfigPath => Path.Combine(TShock.SavePath, "itemsearchplus.guard.json");
+
+    private static HashSet<int> CreateDefaultIllegalItemIds()
+    {
+        return new HashSet<int>
+        {
+            ItemID.Zenith,
+            ItemID.LastPrism,
+            ItemID.CoinGun,
+            ItemID.LunarFlareBook
+        };
+    }
+
+    private static bool TryParseOnOff(string value, out bool enabled)
+    {
+        if (string.Equals(value, "on", StringComparison.OrdinalIgnoreCase))
+        {
+            enabled = true;
+            return true;
+        }
+
+        if (string.Equals(value, "off", StringComparison.OrdinalIgnoreCase))
+        {
+            enabled = false;
+            return true;
+        }
+
+        enabled = false;
+        return false;
+    }
+
 
     Dictionary<int, string> data = new Dictionary<int, string>();
     public override string Name => "物品查找";
@@ -34,6 +80,468 @@ public class MainPlugin : TerrariaPlugin
         Commands.ChatCommands.Add(new Command("itemsearch.tpall", TpAllChest, "tpallchest", "tpallc", "传送所有箱子"));
         Commands.ChatCommands.Add(new Command("itemsearch.rci", RemoveItemChest, "removechestitem", "rci", "删除箱子物品"));
         Commands.ChatCommands.Add(new Command("itemsearch.ri", RemoveItem, "removeitem", "ri", "删除物品"));
+        Commands.ChatCommands.Add(new Command("itemsearch.guard", GuardControlCmd, "itemguard", "ig", "检测控制"));
+
+        EnsureEvidenceTable();
+        LoadGuardConfig();
+        ServerApi.Hooks.GamePostUpdate.Register(this, OnGamePostUpdate);
+    }
+
+    private void OnGamePostUpdate(EventArgs args)
+    {
+        TryBroadcastAbnormalLogSummary();
+
+        if (!_detectionEnabled)
+        {
+            return;
+        }
+
+        if (DateTime.UtcNow - _lastInventoryScan < _scanInterval)
+        {
+            return;
+        }
+
+        _lastInventoryScan = DateTime.UtcNow;
+
+        foreach (var player in TShock.Players)
+        {
+            if (player == null || !player.Active || player.TPlayer == null)
+            {
+                continue;
+            }
+
+            foreach (var entry in GetAllItems(player.TPlayer))
+            {
+                var item = entry.Item;
+                if (item == null || item.type <= 0)
+                {
+                    continue;
+                }
+
+                if (IsIllegalItem(item))
+                {
+                    PunishPlayer(player, item, entry.Slot, "检测到非法物品");
+                    break;
+                }
+
+                if (IsAbnormalStack(item, _abnormalStackMultiplier))
+                {
+                    PunishPlayer(player, item, entry.Slot, "检测到异常数量");
+                    break;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<(Item Item, string Slot)> GetAllItems(Player player)
+    {
+        if (player.selectedItem >= 0 && player.selectedItem < player.inventory.Length)
+        {
+            yield return (player.inventory[player.selectedItem], "held");
+        }
+
+        for (int i = 0; i < player.inventory.Length; i++) yield return (player.inventory[i], $"inventory[{i}]");
+        for (int i = 0; i < player.armor.Length; i++) yield return (player.armor[i], $"armor[{i}]");
+        for (int i = 0; i < player.dye.Length; i++) yield return (player.dye[i], $"dye[{i}]");
+        for (int i = 0; i < player.miscEquips.Length; i++) yield return (player.miscEquips[i], $"miscEquips[{i}]");
+        for (int i = 0; i < player.miscDyes.Length; i++) yield return (player.miscDyes[i], $"miscDyes[{i}]");
+        for (int i = 0; i < player.bank.item.Length; i++) yield return (player.bank.item[i], $"bank1[{i}]");
+        for (int i = 0; i < player.bank2.item.Length; i++) yield return (player.bank2.item[i], $"bank2[{i}]");
+        for (int i = 0; i < player.bank3.item.Length; i++) yield return (player.bank3.item[i], $"bank3[{i}]");
+        for (int i = 0; i < player.bank4.item.Length; i++) yield return (player.bank4.item[i], $"bank4[{i}]");
+        for (int i = 0; i < player.Loadouts[0].Armor.Length; i++) yield return (player.Loadouts[0].Armor[i], $"loadout1.armor[{i}]");
+        for (int i = 0; i < player.Loadouts[1].Armor.Length; i++) yield return (player.Loadouts[1].Armor[i], $"loadout2.armor[{i}]");
+        for (int i = 0; i < player.Loadouts[2].Armor.Length; i++) yield return (player.Loadouts[2].Armor[i], $"loadout3.armor[{i}]");
+        for (int i = 0; i < player.Loadouts[0].Dye.Length; i++) yield return (player.Loadouts[0].Dye[i], $"loadout1.dye[{i}]");
+        for (int i = 0; i < player.Loadouts[1].Dye.Length; i++) yield return (player.Loadouts[1].Dye[i], $"loadout2.dye[{i}]");
+        for (int i = 0; i < player.Loadouts[2].Dye.Length; i++) yield return (player.Loadouts[2].Dye[i], $"loadout3.dye[{i}]");
+        yield return (player.trashItem, "trash");
+    }
+
+    private static bool IsAbnormalStack(Item item, int multiplier)
+    {
+        if (item.stack <= 0)
+        {
+            return false;
+        }
+
+        var allowedMax = Math.Max(1, item.maxStack);
+        return item.stack > allowedMax * Math.Max(1, multiplier);
+    }
+
+    private bool IsIllegalItem(Item item)
+    {
+        return _illegalItemIds.Contains(item.type);
+    }
+
+    private void PunishPlayer(TSPlayer player, Item targetItem, string slot, string reason)
+    {
+        if (_punishRecords.TryGetValue(player.Index, out var lastPunishAt) && DateTime.UtcNow - lastPunishAt < _punishCooldown)
+        {
+            return;
+        }
+
+        _punishRecords[player.Index] = DateTime.UtcNow;
+
+        int itemId = targetItem.type;
+        string itemName = targetItem.Name;
+        int itemStack = targetItem.stack;
+        string action = "log";
+
+        if (_actionLevel >= 2)
+        {
+            targetItem.SetDefaults(0);
+            action = "remove";
+        }
+
+        if (_actionLevel >= 3)
+        {
+            if (_autoWebOnDetect)
+            {
+                player.SetBuff(BuffID.Webbed, 60 * 60 * 60);
+            }
+
+            if (_broadcastOnDetect)
+            {
+                TShock.Utils.Broadcast($"[物品查找] 检测到玩家[{player.Name}]持有异常物品（{reason}），已触发自动处置。", Color.OrangeRed);
+            }
+
+            action = _autoWebOnDetect || _broadcastOnDetect ? "web_broadcast" : "level3_noop";
+        }
+
+        SaveEvidence(player, itemId, itemName, itemStack, slot, reason, action);
+        TShock.Log.Warn($"[ItemSearchPlus] 玩家 {player.Name} 触发检测: {reason}, 物品={itemId}, 数量={itemStack}, 槽位={slot}, action={action}");
+    }
+
+
+    private void TryBroadcastAbnormalLogSummary()
+    {
+        if (!_abnormalLogBroadcastEnabled)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        if (now - _lastAbnormalLogBroadcast < _abnormalLogBroadcastInterval)
+        {
+            return;
+        }
+
+        QueryResult? result = null;
+        try
+        {
+            result = TShock.DB.QueryReader("SELECT COUNT(1) FROM item_guard_logs WHERE reason LIKE @0 AND time_utc >= @1", "%异常%", _lastAbnormalLogBroadcast.ToString("O"));
+            if (result.Reader.Read())
+            {
+                var count = Convert.ToInt32(result.Reader.GetValue(0));
+                if (count > 0)
+                {
+                    TShock.Utils.Broadcast($"[物品查找] 最近 {Math.Max(1, (int)_abnormalLogBroadcastInterval.TotalHours)} 小时新增异常日志 {count} 条，请管理员及时使用 /ig logs 查看。", Color.Gold);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            TShock.Log.ConsoleError($"[ItemSearchPlus] 异常日志定时通报失败: {ex}");
+        }
+        finally
+        {
+            result?.Dispose();
+            _lastAbnormalLogBroadcast = now;
+        }
+    }
+
+    private void ViewGuardLogsCmd(CommandArgs args)
+    {
+        if (args.Parameters.Count < 3)
+        {
+            args.Player.SendInfoMessage("用法:/ig logs <all|玩家名> <all|held|trash|inventory|armor|dye|misc|bank|loadout> [条数]");
+            return;
+        }
+
+        var playerFilter = args.Parameters[1];
+        var slotType = args.Parameters[2].ToLowerInvariant();
+        var limit = 20;
+        if (args.Parameters.Count >= 4 && (!int.TryParse(args.Parameters[3], out limit) || limit < 1 || limit > 100))
+        {
+            args.Player.SendErrorMessage("条数范围: 1-100");
+            return;
+        }
+
+        var slotPattern = GetSlotPattern(slotType);
+        if (slotPattern == null)
+        {
+            args.Player.SendErrorMessage("无效槽位类型。可用: all|held|trash|inventory|armor|dye|misc|bank|loadout");
+            return;
+        }
+
+        QueryResult? result = null;
+        try
+        {
+            var sql = "SELECT time_utc, player_name, item_name, stack, slot, reason, action FROM item_guard_logs WHERE 1=1";
+            var parameters = new List<object>();
+
+            if (!string.Equals(playerFilter, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                sql += " AND player_name = @" + parameters.Count;
+                parameters.Add(playerFilter);
+            }
+
+            if (!string.Equals(slotPattern, "%", StringComparison.Ordinal))
+            {
+                sql += " AND slot LIKE @" + parameters.Count;
+                parameters.Add(slotPattern);
+            }
+
+            sql += " ORDER BY id DESC LIMIT @" + parameters.Count;
+            parameters.Add(limit);
+
+            result = TShock.DB.QueryReader(sql, parameters.ToArray());
+            var lines = new List<string>();
+            while (result.Reader.Read())
+            {
+                var time = result.Reader.GetString(0);
+                var player = result.Reader.GetString(1);
+                var itemName = result.Reader.IsDBNull(2) ? "未知物品" : result.Reader.GetString(2);
+                var stack = result.Reader.GetInt32(3);
+                var slot = result.Reader.IsDBNull(4) ? "unknown" : result.Reader.GetString(4);
+                var reason = result.Reader.IsDBNull(5) ? "-" : result.Reader.GetString(5);
+                var action = result.Reader.IsDBNull(6) ? "-" : result.Reader.GetString(6);
+                lines.Add($"[{time}] {player} | {itemName}x{stack} | {slot} | {reason} | {action}");
+            }
+
+            if (lines.Count == 0)
+            {
+                args.Player.SendInfoMessage("未找到符合条件的异常日志。");
+                return;
+            }
+
+            args.Player.SendSuccessMessage($"异常日志查询结果({lines.Count}条):");
+            args.Player.SendInfoMessage(string.Join("\n", lines));
+        }
+        finally
+        {
+            result?.Dispose();
+        }
+    }
+
+    private static string? GetSlotPattern(string slotType)
+    {
+        return slotType switch
+        {
+            "all" => "%",
+            "held" => "held",
+            "trash" => "trash",
+            "inventory" => "inventory%",
+            "armor" => "armor%",
+            "dye" => "dye%",
+            "misc" => "misc%",
+            "bank" => "bank%",
+            "loadout" => "loadout%",
+            _ => null
+        };
+    }
+
+    private void EnsureEvidenceTable()
+    {
+        TShock.DB.Query(@"CREATE TABLE IF NOT EXISTS item_guard_logs (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+time_utc TEXT NOT NULL,
+player_name TEXT NOT NULL,
+account_id INTEGER,
+item_id INTEGER NOT NULL,
+item_name TEXT,
+stack INTEGER NOT NULL,
+slot TEXT,
+reason TEXT,
+action TEXT
+)");
+    }
+
+    private void SaveEvidence(TSPlayer player, int itemId, string itemName, int itemStack, string slot, string reason, string action)
+    {
+        var accountId = player.Account?.ID ?? -1;
+        TShock.DB.Query("INSERT INTO item_guard_logs (time_utc, player_name, account_id, item_id, item_name, stack, slot, reason, action) VALUES (@0, @1, @2, @3, @4, @5, @6, @7, @8)",
+            DateTime.UtcNow.ToString("O"), player.Name, accountId, itemId, itemName, itemStack, slot, reason, action);
+    }
+
+    private void LoadGuardConfig()
+    {
+        try
+        {
+            if (!File.Exists(ConfigPath))
+            {
+                SaveGuardConfig();
+                return;
+            }
+
+            var text = File.ReadAllText(ConfigPath);
+            var cfg = System.Text.Json.JsonSerializer.Deserialize<GuardConfig>(text);
+            if (cfg == null)
+            {
+                return;
+            }
+
+            _detectionEnabled = cfg.DetectionEnabled;
+            _autoWebOnDetect = cfg.AutoWebOnDetect;
+            _broadcastOnDetect = cfg.BroadcastOnDetect;
+            _abnormalStackMultiplier = Math.Clamp(cfg.AbnormalStackMultiplier, 2, 20);
+            _actionLevel = Math.Clamp(cfg.ActionLevel, 1, 3);
+            _scanInterval = TimeSpan.FromSeconds(Math.Clamp(cfg.ScanIntervalSeconds, 1, 300));
+            _punishCooldown = TimeSpan.FromSeconds(Math.Clamp(cfg.PunishCooldownSeconds, 1, 600));
+            _abnormalLogBroadcastEnabled = cfg.AbnormalLogBroadcastEnabled;
+            _abnormalLogBroadcastInterval = TimeSpan.FromHours(Math.Clamp(cfg.AbnormalLogBroadcastHours, 1, 24));
+            _illegalItemIds = new HashSet<int>(cfg.IllegalItemIds?.Where(i => i > 0) ?? Array.Empty<int>());
+            if (_illegalItemIds.Count == 0)
+            {
+                _illegalItemIds = CreateDefaultIllegalItemIds();
+            }
+        }
+        catch (Exception ex)
+        {
+            TShock.Log.ConsoleError($"[ItemSearchPlus] 读取配置失败: {ex}");
+        }
+    }
+
+    private void SaveGuardConfig()
+    {
+        var cfg = new GuardConfig
+        {
+            DetectionEnabled = _detectionEnabled,
+            AutoWebOnDetect = _autoWebOnDetect,
+            BroadcastOnDetect = _broadcastOnDetect,
+            AbnormalStackMultiplier = _abnormalStackMultiplier,
+            ActionLevel = _actionLevel,
+            ScanIntervalSeconds = (int)_scanInterval.TotalSeconds,
+            PunishCooldownSeconds = (int)_punishCooldown.TotalSeconds,
+            AbnormalLogBroadcastEnabled = _abnormalLogBroadcastEnabled,
+            AbnormalLogBroadcastHours = (int)_abnormalLogBroadcastInterval.TotalHours,
+            IllegalItemIds = _illegalItemIds.OrderBy(i => i).ToList()
+        };
+
+        var text = System.Text.Json.JsonSerializer.Serialize(cfg, new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+        File.WriteAllText(ConfigPath, text);
+    }
+
+    private void SendGuardHelp(TSPlayer player)
+    {
+        player.SendInfoMessage("[物品守卫] 指令帮助");
+        player.SendInfoMessage("/ig help - 显示本帮助");
+        player.SendInfoMessage("/ig status - 查看当前状态");
+        player.SendInfoMessage("/ig enable|disable - 开启/关闭检测");
+        player.SendInfoMessage("/ig web <on|off> - 命中后是否自动网住");
+        player.SendInfoMessage("/ig broadcast <on|off> - 命中后是否全服通报");
+        player.SendInfoMessage("/ig multiplier <2-20> - 异常堆叠倍率阈值");
+        player.SendInfoMessage("/ig level <1-3> - 处置等级(1记录/2清除/3清除+网住通报)");
+        player.SendInfoMessage("/ig ablog <on|off> - 异常日志定时通报开关");
+        player.SendInfoMessage("/ig abloghours <1-24> - 异常日志通报周期(小时)");
+        player.SendInfoMessage("/ig logs <all|玩家名> <all|held|trash|inventory|armor|dye|misc|bank|loadout> [1-100]");
+        player.SendInfoMessage("/ig save|reload - 保存/重载配置");
+    }
+
+    private void GuardControlCmd(CommandArgs args)
+    {
+        if (args.Parameters.Count == 0)
+        {
+            SendGuardHelp(args.Player);
+            return;
+        }
+
+        var action = args.Parameters[0].ToLowerInvariant();
+        switch (action)
+        {
+            case "help":
+                SendGuardHelp(args.Player);
+                return;
+            case "status":
+                args.Player.SendInfoMessage($"检测状态:{(_detectionEnabled ? "开启" : "关闭")}, 自动网住:{(_autoWebOnDetect ? "开启" : "关闭")}, 全服通报:{(_broadcastOnDetect ? "开启" : "关闭")}, 异常倍率:{_abnormalStackMultiplier}x, 处置等级:{_actionLevel}, 扫描间隔:{_scanInterval.TotalSeconds}s, 异常日志定时通报:{(_abnormalLogBroadcastEnabled ? "开启" : "关闭")}, 周期:{_abnormalLogBroadcastInterval.TotalHours}h");
+                return;
+            case "enable":
+                _detectionEnabled = true;
+                args.Player.SendSuccessMessage("非法物品检测已开启。");
+                return;
+            case "disable":
+                _detectionEnabled = false;
+                args.Player.SendWarningMessage("非法物品检测已关闭。");
+                return;
+            case "web":
+                if (args.Parameters.Count < 2 || !TryParseOnOff(args.Parameters[1], out var webEnabled))
+                {
+                    args.Player.SendInfoMessage("用法:/ig web <on|off>");
+                    return;
+                }
+
+                _autoWebOnDetect = webEnabled;
+                args.Player.SendSuccessMessage($"自动网住已{(_autoWebOnDetect ? "开启" : "关闭")}");
+                return;
+            case "broadcast":
+                if (args.Parameters.Count < 2 || !TryParseOnOff(args.Parameters[1], out var broadcastEnabled))
+                {
+                    args.Player.SendInfoMessage("用法:/ig broadcast <on|off>");
+                    return;
+                }
+
+                _broadcastOnDetect = broadcastEnabled;
+                args.Player.SendSuccessMessage($"全服通报已{(_broadcastOnDetect ? "开启" : "关闭")}");
+                return;
+            case "multiplier":
+                if (args.Parameters.Count < 2 || !int.TryParse(args.Parameters[1], out var multiplier) || multiplier < 2 || multiplier > 20)
+                {
+                    args.Player.SendInfoMessage("用法:/ig multiplier <2-20>");
+                    return;
+                }
+
+                _abnormalStackMultiplier = multiplier;
+                args.Player.SendSuccessMessage($"异常数量判定倍率已调整为 {_abnormalStackMultiplier}x。");
+                return;
+            case "level":
+                if (args.Parameters.Count < 2 || !int.TryParse(args.Parameters[1], out var level) || level < 1 || level > 3)
+                {
+                    args.Player.SendInfoMessage("用法:/ig level <1-3> (1=只记录,2=记录+清除,3=记录+清除+网住/通报)");
+                    return;
+                }
+
+                _actionLevel = level;
+                args.Player.SendSuccessMessage($"处置等级已调整为 {_actionLevel}");
+                return;
+            case "ablog":
+                if (args.Parameters.Count < 2 || !TryParseOnOff(args.Parameters[1], out var abnormalBroadcastEnabled))
+                {
+                    args.Player.SendInfoMessage("用法:/ig ablog <on|off>");
+                    return;
+                }
+
+                _abnormalLogBroadcastEnabled = abnormalBroadcastEnabled;
+                args.Player.SendSuccessMessage($"异常日志定时通报已{(_abnormalLogBroadcastEnabled ? "开启" : "关闭")}");
+                return;
+            case "abloghours":
+                if (args.Parameters.Count < 2 || !int.TryParse(args.Parameters[1], out var hours) || hours < 1 || hours > 24)
+                {
+                    args.Player.SendInfoMessage("用法:/ig abloghours <1-24>");
+                    return;
+                }
+
+                _abnormalLogBroadcastInterval = TimeSpan.FromHours(hours);
+                args.Player.SendSuccessMessage($"异常日志通报周期已调整为 {hours} 小时。");
+                return;
+            case "logs":
+                ViewGuardLogsCmd(args);
+                return;
+            case "save":
+                SaveGuardConfig();
+                args.Player.SendSuccessMessage($"配置已保存到: {ConfigPath}");
+                return;
+            case "reload":
+                LoadGuardConfig();
+                args.Player.SendSuccessMessage("配置已重新加载。");
+                return;
+            default:
+                args.Player.SendErrorMessage("未知子命令，请使用 /ig help 查看帮助。");
+                return;
+        }
     }
 
     private void RemoveItem(CommandArgs args)
@@ -118,8 +626,8 @@ public class MainPlugin : TerrariaPlugin
             {
                 if (plr.TPlayer.miscDyes[i].type == item)
                 {
-                    count += plr.TPlayer.miscEquips[i].stack;
-                    plr.TPlayer.miscEquips[i].SetDefaults(0);
+                    count += plr.TPlayer.miscDyes[i].stack;
+                    plr.TPlayer.miscDyes[i].SetDefaults(0);
                     NetMessage.SendData(5, -1, -1, null, plr.Index, PlayerItemSlotID.MiscDye0 + i);
 
                 }
@@ -597,6 +1105,11 @@ public class MainPlugin : TerrariaPlugin
         {
             Console.WriteLine(ex);
         }
+        finally
+        {
+            queryResult?.Dispose();
+            queryResult = null;
+        }
 
     }
 
@@ -624,7 +1137,6 @@ public class MainPlugin : TerrariaPlugin
                 list.InsertRange(87, new NetItem[2]);
                 list.AddRange(new NetItem[NetItem.MaxInventory - list.Count]);
             }
-            queryResult?.Dispose();
             return list;
         }
         catch
@@ -637,7 +1149,23 @@ public class MainPlugin : TerrariaPlugin
     {
         if (disposing)
         {
+            ServerApi.Hooks.GamePostUpdate.Deregister(this, OnGamePostUpdate);
         }
         base.Dispose(disposing);
     }
+
+
+public class GuardConfig
+{
+    public bool DetectionEnabled { get; set; } = true;
+    public bool AutoWebOnDetect { get; set; } = true;
+    public bool BroadcastOnDetect { get; set; } = true;
+    public int AbnormalStackMultiplier { get; set; } = 2;
+    public int ActionLevel { get; set; } = 3;
+    public int ScanIntervalSeconds { get; set; } = 10;
+    public int PunishCooldownSeconds { get; set; } = 30;
+    public bool AbnormalLogBroadcastEnabled { get; set; } = true;
+    public int AbnormalLogBroadcastHours { get; set; } = 1;
+    public List<int> IllegalItemIds { get; set; } = new();
+}
 }
