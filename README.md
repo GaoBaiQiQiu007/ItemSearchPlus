@@ -11,7 +11,7 @@
 /sc	/searchchest	itemsearch.chest	   查找包含指定物品的箱子，显示箱子 ID / 坐标 / 数量    
 /tpc	/tpchest	itemsearch.chesttp	   传送至指定 ID 的箱子位置（仅限游戏内使用）    
 /ci	/chestinfo	itemsearch.chestinfo   	查询指定箱子的详细信息（坐标 / 名称 /    物品）    
-/tpall	/tpall	itemsearch.tpall	   逐个传送至所有在线玩家位置（间隔 1 秒） 
+/tpall	/tpall	itemsearch.tpall	   逐个传送至所有在线玩家位置（间隔 1 秒）   
 /tpallc	/tpallchest	itemsearch.tpall	   逐个传送至所有箱子位置（间隔 0.3 秒）    
 /rci	/removechestitem	itemsearch.rci   	删除指定箱子中的目标物品    
 /ri	/removeitem	itemsearch.ri   	删除指定玩家的目标物品（在线 / 离线玩家均支持）    
