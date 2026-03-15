@@ -4,11 +4,24 @@ using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.DB;
 using Terraria.ID;
+using Microsoft.Xna.Framework;
 
 [ApiVersion(2, 1)]
 public class MainPlugin : TerrariaPlugin
 {
     QueryResult? queryResult = null;
+
+    private DateTime _lastInventoryScan = DateTime.MinValue;
+    private readonly Dictionary<int, DateTime> _punishRecords = new();
+    private static readonly TimeSpan ScanInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan PunishCooldown = TimeSpan.FromSeconds(30);
+    private static readonly HashSet<int> IllegalItemIds = new()
+    {
+        ItemID.Zenith,
+        ItemID.LastPrism,
+        ItemID.CoinGun,
+        ItemID.LunarFlareBook
+    };
 
     Dictionary<int, string> data = new Dictionary<int, string>();
     public override string Name => "物品查找";
@@ -34,6 +47,95 @@ public class MainPlugin : TerrariaPlugin
         Commands.ChatCommands.Add(new Command("itemsearch.tpall", TpAllChest, "tpallchest", "tpallc", "传送所有箱子"));
         Commands.ChatCommands.Add(new Command("itemsearch.rci", RemoveItemChest, "removechestitem", "rci", "删除箱子物品"));
         Commands.ChatCommands.Add(new Command("itemsearch.ri", RemoveItem, "removeitem", "ri", "删除物品"));
+
+        ServerApi.Hooks.GamePostUpdate.Register(this, OnGamePostUpdate);
+    }
+
+    private void OnGamePostUpdate(EventArgs args)
+    {
+        if (DateTime.UtcNow - _lastInventoryScan < ScanInterval)
+        {
+            return;
+        }
+
+        _lastInventoryScan = DateTime.UtcNow;
+
+        foreach (var player in TShock.Players)
+        {
+            if (player == null || !player.Active || player.TPlayer == null)
+            {
+                continue;
+            }
+
+            foreach (var item in GetAllItems(player.TPlayer))
+            {
+                if (item == null || item.type <= 0)
+                {
+                    continue;
+                }
+
+                if (IsIllegalItem(item))
+                {
+                    PunishPlayer(player, item, "检测到非法物品");
+                    break;
+                }
+
+                if (IsAbnormalStack(item))
+                {
+                    PunishPlayer(player, item, "检测到异常数量");
+                    break;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<Item> GetAllItems(Player player)
+    {
+        foreach (var i in player.inventory) yield return i;
+        foreach (var i in player.armor) yield return i;
+        foreach (var i in player.dye) yield return i;
+        foreach (var i in player.miscEquips) yield return i;
+        foreach (var i in player.miscDyes) yield return i;
+        foreach (var i in player.bank.item) yield return i;
+        foreach (var i in player.bank2.item) yield return i;
+        foreach (var i in player.bank3.item) yield return i;
+        foreach (var i in player.bank4.item) yield return i;
+        foreach (var i in player.Loadouts[0].Armor) yield return i;
+        foreach (var i in player.Loadouts[1].Armor) yield return i;
+        foreach (var i in player.Loadouts[2].Armor) yield return i;
+        foreach (var i in player.Loadouts[0].Dye) yield return i;
+        foreach (var i in player.Loadouts[1].Dye) yield return i;
+        foreach (var i in player.Loadouts[2].Dye) yield return i;
+        yield return player.trashItem;
+    }
+
+    private static bool IsAbnormalStack(Item item)
+    {
+        if (item.stack <= 0)
+        {
+            return false;
+        }
+
+        var allowedMax = Math.Max(1, item.maxStack);
+        return item.stack > allowedMax * 2;
+    }
+
+    private static bool IsIllegalItem(Item item)
+    {
+        return IllegalItemIds.Contains(item.type);
+    }
+
+    private void PunishPlayer(TSPlayer player, Item targetItem, string reason)
+    {
+        if (_punishRecords.TryGetValue(player.Index, out var lastPunishAt) && DateTime.UtcNow - lastPunishAt < PunishCooldown)
+        {
+            return;
+        }
+
+        _punishRecords[player.Index] = DateTime.UtcNow;
+        player.SetBuff(BuffID.Webbed, 60 * 60 * 60);
+        TShock.Utils.Broadcast($"[物品查找] 检测到玩家[{player.Name}]持有{TShock.Utils.ItemTag(targetItem)}（{reason}），已自动网住并向全服通报。", Color.OrangeRed);
+        TShock.Log.Warn($"[ItemSearchPlus] 玩家 {player.Name} 触发检测: {reason}, 物品={targetItem.Name}, 数量={targetItem.stack}");
     }
 
     private void RemoveItem(CommandArgs args)
@@ -637,6 +739,7 @@ public class MainPlugin : TerrariaPlugin
     {
         if (disposing)
         {
+            ServerApi.Hooks.GamePostUpdate.Deregister(this, OnGamePostUpdate);
         }
         base.Dispose(disposing);
     }
